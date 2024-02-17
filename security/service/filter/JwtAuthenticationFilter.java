@@ -1,4 +1,4 @@
-package security.service.jwt;
+package security.service.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +15,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import security.service.UserDetailsServiceImpl;
+import security.service.jwt.JwtTokenExtractor;
+import security.service.jwt.JwtTokenValidator;
 
 /**
  * Фильтр для JWT-аутентификации.
