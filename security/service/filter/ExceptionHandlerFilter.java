@@ -56,6 +56,12 @@ public class ExceptionHandlerFilter extends OncePerRequestFilter {
             response.getWriter().write(objectMapper
                 .writeValueAsString(ServerException.of(ServerErrorCode.WRONG_JWT_TOKEN,
                     HttpStatus.FORBIDDEN)));
+        } catch (Exception exception) {
+            response.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+            response.setStatus(HttpStatus.BAD_REQUEST.value());
+            response.getWriter().write(objectMapper
+                .writeValueAsString(ServerException.of(ServerErrorCode.CAUGHT_EXCEPTION,
+                    HttpStatus.BAD_REQUEST)));
         }
     }
 }
