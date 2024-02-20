@@ -16,6 +16,7 @@ jobs:
         run: |
           git clone https://github.com/heavenboards/user-service.git
           cd ./user-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
           git submodule update --init --remote --recursive
           git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
 
@@ -35,6 +36,7 @@ jobs:
         run: |
           ls
           cd ./user-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
           ./mvnw clean package
   project-service:
     runs-on: ubuntu-latest
@@ -46,6 +48,7 @@ jobs:
         run: |
           git clone https://github.com/heavenboards/project-service.git
           cd ./project-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
           git submodule update --init --remote --recursive
           git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
 
@@ -65,4 +68,5 @@ jobs:
         run: |
           ls
           cd ./project-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
           ./mvnw clean package
