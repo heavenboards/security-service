@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import transfer.contract.exception.ApplicationException;
 import transfer.contract.exception.BaseErrorCode;
+import transfer.contract.exception.ClientApplicationException;
 
 /**
  * Фильтр для обработки исключений, возникающий в фильтрах Spring.
@@ -43,11 +44,23 @@ public class ExceptionHandlerFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(request, response);
         } catch (JwtException exception) {
+            log.error("Поймано JwtException с сообщением: {}", exception.getMessage());
+
             response.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             response.getWriter().write(objectMapper
-                .writeValueAsString(new ApplicationException(BaseErrorCode.WRONG_JWT_TOKEN,
-                    "Got a wrong JWT-token in Authorization header")));
+                .writeValueAsString(new ClientApplicationException(BaseErrorCode.WRONG_JWT_TOKEN,
+                    "Получен невалидный JWT-токен в Authorization-хедере")));
+        } catch (Exception exception) {
+            log.error("Поймано {} с сообщением: {}", exception.getClass().getSimpleName(),
+                exception.getMessage());
+
+            response.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+            response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.getWriter().write(objectMapper
+                .writeValueAsString(new ApplicationException(BaseErrorCode.INTERNAL_ERROR,
+                    String.format("Произошло исключение %s на сервере с сообщением: %s",
+                        exception.getClass().getSimpleName(), exception.getMessage()))));
         }
     }
 }
