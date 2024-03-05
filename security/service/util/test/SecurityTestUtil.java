@@ -50,6 +50,19 @@ public class SecurityTestUtil {
     }
 
     /**
+     * Сохранение контекста аутентификации для тестов.
+     *
+     * @param authenticatedUser - пользователь, которого мы помещаем в Security-контекст.
+     */
+    public void securityContextHelper(UserTo authenticatedUser) {
+        var authenticationToken = new UsernamePasswordAuthenticationToken(
+            authenticatedUser, null, authenticatedUser.getAuthorities()
+        );
+
+        SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+    }
+
+    /**
      * Сгенерировать Bearer-токен.
      *
      * @return Bearer-токен
