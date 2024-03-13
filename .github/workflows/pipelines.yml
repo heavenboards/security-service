@@ -1,4 +1,4 @@
-name: 🔥 Сборка и тесты МР-а
+name: 🔥 Сборка, тесты и деплой
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  user-service:
+  user-service-test:
     runs-on: ubuntu-latest
     steps:
       - name: 👉🏼 Переключаемся на файлы проекта
@@ -37,8 +37,69 @@ jobs:
           ls
           cd ./user-service
           git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
           ./mvnw clean package
-  project-service:
+  user-service-dockerize:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: user-service-test
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем гит сабмодули
+        run: |
+          git clone https://github.com/heavenboards/user-service.git
+          cd ./user-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          cd ./user-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем install + docker build + docker push
+        run: |
+          cd ./user-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw -DskipTests -DregistryUsername=${{ vars.CI_REGISTRY_USER }} -DregistryPassword='${{ vars.CI_REGISTRY_PASSWORD }}' clean install
+  user-service-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: user-service-dockerize
+    steps:
+      - name: 👉🏼 Устанавливаем sshpass
+        run: sudo apt update && sudo apt install -y sshpass
+
+      - name: 👉🏼 Подключаемся к удаленному серверу
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          echo Connected to the remote server ${{ vars.REMOTE_SERVER_HOST }}!"
+
+      - name: 👉🏼 Перезапускаем контейнер с приложением
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          docker stop ${{ vars.CI_REGISTRY_USER }}_${{ vars.USER_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rm ${{ vars.CI_REGISTRY_USER }}_${{ vars.USER_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker rmi ${{ vars.CI_REGISTRY_USER }}/${{ vars.USER_SERVICE_REPOSITORY_NAME }}:1.0.0 -f || true &&
+          docker pull ${{ vars.CI_REGISTRY_USER }}/${{ vars.USER_SERVICE_REPOSITORY_NAME }}:1.0.0 || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker network create -d bridge ${{ vars.DOCKER_NETWORK_NAME }} || true &&
+          docker run -d --rm -e REMOTE_SERVER_HOST=${{ vars.REMOTE_SERVER_HOST }} -e DOCKER_NETWORK_NAME=${{ vars.DOCKER_NETWORK_NAME }} -e POSTGRES_DATABASE_USERNAME=${{ vars.POSTGRES_DATABASE_USERNAME }} -e POSTGRES_DATABASE_PASSWORD=${{ vars.POSTGRES_DATABASE_PASSWORD }} -e JWT_SECRET=${{ vars.JWT_SECRET }} --name ${{ vars.CI_REGISTRY_USER }}_${{ vars.USER_SERVICE_REPOSITORY_NAME }} --network ${{ vars.DOCKER_NETWORK_NAME }} -p ${{ vars.USER_SERVICE_CONTAINER_PORT }}:${{ vars.USER_SERVICE_CONTAINER_PORT }} ${{ vars.CI_REGISTRY_USER }}/${{ vars.USER_SERVICE_REPOSITORY_NAME }}:1.0.0"
+  project-service-test:
     runs-on: ubuntu-latest
     steps:
       - name: 👉🏼 Переключаемся на файлы проекта
@@ -69,8 +130,162 @@ jobs:
           ls
           cd ./project-service
           git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
           ./mvnw clean package
-  board-service:
+  project-service-dockerize:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: project-service-test
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем гит сабмодули
+        run: |
+          git clone https://github.com/heavenboards/project-service.git
+          cd ./project-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          cd ./project-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем install + docker build + docker push
+        run: |
+          cd ./project-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw -DskipTests -DregistryUsername=${{ vars.CI_REGISTRY_USER }} -DregistryPassword='${{ vars.CI_REGISTRY_PASSWORD }}' clean install
+  project-service-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: project-service-dockerize
+    steps:
+      - name: 👉🏼 Устанавливаем sshpass
+        run: sudo apt update && sudo apt install -y sshpass
+
+      - name: 👉🏼 Подключаемся к удаленному серверу
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          echo Connected to the remote server ${{ vars.REMOTE_SERVER_HOST }}!"
+
+      - name: 👉🏼 Перезапускаем контейнер с приложением
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          docker stop ${{ vars.CI_REGISTRY_USER }}_${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rm ${{ vars.CI_REGISTRY_USER }}_${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker rmi ${{ vars.CI_REGISTRY_USER }}/${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }}:1.0.0 -f || true &&
+          docker pull ${{ vars.CI_REGISTRY_USER }}/${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }}:1.0.0 || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker network create -d bridge ${{ vars.DOCKER_NETWORK_NAME }} || true &&
+          docker run -d --rm -e REMOTE_SERVER_HOST=${{ vars.REMOTE_SERVER_HOST }} -e DOCKER_NETWORK_NAME=${{ vars.DOCKER_NETWORK_NAME }} -e POSTGRES_DATABASE_USERNAME=${{ vars.POSTGRES_DATABASE_USERNAME }} -e POSTGRES_DATABASE_PASSWORD=${{ vars.POSTGRES_DATABASE_PASSWORD }} -e JWT_SECRET=${{ vars.JWT_SECRET }} --name ${{ vars.CI_REGISTRY_USER }}_${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }} --network ${{ vars.DOCKER_NETWORK_NAME }} -p ${{ vars.PROJECT_SERVICE_CONTAINER_PORT }}:${{ vars.PROJECT_SERVICE_CONTAINER_PORT }} ${{ vars.CI_REGISTRY_USER }}/${{ vars.PROJECT_SERVICE_REPOSITORY_NAME }}:1.0.0"
+  composer-service-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем модуль
+        run: |
+          git clone https://github.com/heavenboards/composer-service.git
+          cd ./composer-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          ls
+          cd ./composer-service
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем сборку и тесты
+        run: |
+          ls
+          cd ./composer-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw clean package
+  composer-service-dockerize:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: composer-service-test
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем гит сабмодули
+        run: |
+          git clone https://github.com/heavenboards/composer-service.git
+          cd ./composer-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          cd ./composer-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем install + docker build + docker push
+        run: |
+          cd ./composer-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw -DskipTests -DregistryUsername=${{ vars.CI_REGISTRY_USER }} -DregistryPassword='${{ vars.CI_REGISTRY_PASSWORD }}' clean install
+  composer-service-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: composer-service-dockerize
+    steps:
+      - name: 👉🏼 Устанавливаем sshpass
+        run: sudo apt update && sudo apt install -y sshpass
+
+      - name: 👉🏼 Подключаемся к удаленному серверу
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          echo Connected to the remote server ${{ vars.REMOTE_SERVER_HOST }}!"
+
+      - name: 👉🏼 Перезапускаем контейнер с приложением
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          docker stop ${{ vars.CI_REGISTRY_USER }}_${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rm ${{ vars.CI_REGISTRY_USER }}_${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker rmi ${{ vars.CI_REGISTRY_USER }}/${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }}:1.0.0 -f || true &&
+          docker pull ${{ vars.CI_REGISTRY_USER }}/${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }}:1.0.0 || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker network create -d bridge ${{ vars.DOCKER_NETWORK_NAME }} || true &&
+          docker run -d --rm -e REMOTE_SERVER_HOST=${{ vars.REMOTE_SERVER_HOST }} -e DOCKER_NETWORK_NAME=${{ vars.DOCKER_NETWORK_NAME }} -e POSTGRES_DATABASE_USERNAME=${{ vars.POSTGRES_DATABASE_USERNAME }} -e POSTGRES_DATABASE_PASSWORD=${{ vars.POSTGRES_DATABASE_PASSWORD }} -e JWT_SECRET=${{ vars.JWT_SECRET }} --name ${{ vars.CI_REGISTRY_USER }}_${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }} --network ${{ vars.DOCKER_NETWORK_NAME }} -p ${{ vars.COMPOSER_SERVICE_CONTAINER_PORT }}:${{ vars.COMPOSER_SERVICE_CONTAINER_PORT }} ${{ vars.CI_REGISTRY_USER }}/${{ vars.COMPOSER_SERVICE_REPOSITORY_NAME }}:1.0.0"
+  board-service-test:
     runs-on: ubuntu-latest
     steps:
       - name: 👉🏼 Переключаемся на файлы проекта
@@ -101,8 +316,69 @@ jobs:
           ls
           cd ./board-service
           git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
           ./mvnw clean package
-  task-service:
+  board-service-dockerize:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: board-service-test
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем гит сабмодули
+        run: |
+          git clone https://github.com/heavenboards/board-service.git
+          cd ./board-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          cd ./board-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем install + docker build + docker push
+        run: |
+          cd ./board-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw -DskipTests -DregistryUsername=${{ vars.CI_REGISTRY_USER }} -DregistryPassword='${{ vars.CI_REGISTRY_PASSWORD }}' clean install
+  board-service-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: board-service-dockerize
+    steps:
+      - name: 👉🏼 Устанавливаем sshpass
+        run: sudo apt update && sudo apt install -y sshpass
+
+      - name: 👉🏼 Подключаемся к удаленному серверу
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          echo Connected to the remote server ${{ vars.REMOTE_SERVER_HOST }}!"
+
+      - name: 👉🏼 Перезапускаем контейнер с приложением
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          docker stop ${{ vars.CI_REGISTRY_USER }}_${{ vars.BOARD_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rm ${{ vars.CI_REGISTRY_USER }}_${{ vars.BOARD_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker rmi ${{ vars.CI_REGISTRY_USER }}/${{ vars.BOARD_SERVICE_REPOSITORY_NAME }}:1.0.0 -f || true &&
+          docker pull ${{ vars.CI_REGISTRY_USER }}/${{ vars.BOARD_SERVICE_REPOSITORY_NAME }}:1.0.0 || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker network create -d bridge ${{ vars.DOCKER_NETWORK_NAME }} || true &&
+          docker run -d --rm -e REMOTE_SERVER_HOST=${{ vars.REMOTE_SERVER_HOST }} -e DOCKER_NETWORK_NAME=${{ vars.DOCKER_NETWORK_NAME }} -e POSTGRES_DATABASE_USERNAME=${{ vars.POSTGRES_DATABASE_USERNAME }} -e POSTGRES_DATABASE_PASSWORD=${{ vars.POSTGRES_DATABASE_PASSWORD }} -e JWT_SECRET=${{ vars.JWT_SECRET }} --name ${{ vars.CI_REGISTRY_USER }}_${{ vars.BOARD_SERVICE_REPOSITORY_NAME }} --network ${{ vars.DOCKER_NETWORK_NAME }} -p ${{ vars.BOARD_SERVICE_CONTAINER_PORT }}:${{ vars.BOARD_SERVICE_CONTAINER_PORT }} ${{ vars.CI_REGISTRY_USER }}/${{ vars.BOARD_SERVICE_REPOSITORY_NAME }}:1.0.0"
+  task-service-test:
     runs-on: ubuntu-latest
     steps:
       - name: 👉🏼 Переключаемся на файлы проекта
@@ -133,4 +409,65 @@ jobs:
           ls
           cd ./task-service
           git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
           ./mvnw clean package
+  task-service-dockerize:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: task-service-test
+    steps:
+      - name: 👉🏼 Переключаемся на файлы проекта
+        uses: actions/checkout@v3
+
+      - name: 👉🏼 Инициализируем гит сабмодули
+        run: |
+          git clone https://github.com/heavenboards/task-service.git
+          cd ./task-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+
+      - name: 👉🏼 Настройка JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 👉🏼 Делаем maven wrapper исполняемым
+        run: |
+          cd ./task-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          chmod +x ./mvnw
+
+      - name: 👉🏼 Запускаем install + docker build + docker push
+        run: |
+          cd ./task-service
+          git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"
+          git submodule update --init --remote --recursive
+          git submodule foreach 'git checkout ${GITHUB_REF##*/} && git pull || echo "In ${sm_path} branch ${GITHUB_REF##*/} not found"'
+          ./mvnw -DskipTests -DregistryUsername=${{ vars.CI_REGISTRY_USER }} -DregistryPassword='${{ vars.CI_REGISTRY_PASSWORD }}' clean install
+  task-service-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs: task-service-dockerize
+    steps:
+      - name: 👉🏼 Устанавливаем sshpass
+        run: sudo apt update && sudo apt install -y sshpass
+
+      - name: 👉🏼 Подключаемся к удаленному серверу
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          echo Connected to the remote server ${{ vars.REMOTE_SERVER_HOST }}!"
+
+      - name: 👉🏼 Перезапускаем контейнер с приложением
+        run: sshpass -p ${{ vars.REMOTE_SERVER_PASSWORD }} ssh -o StrictHostKeyChecking=no root@${{ vars.REMOTE_SERVER_HOST }} "
+          docker stop ${{ vars.CI_REGISTRY_USER }}_${{ vars.TASK_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rm ${{ vars.CI_REGISTRY_USER }}_${{ vars.TASK_SERVICE_REPOSITORY_NAME }} || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker rmi ${{ vars.CI_REGISTRY_USER }}/${{ vars.TASK_SERVICE_REPOSITORY_NAME }}:1.0.0 -f || true &&
+          docker pull ${{ vars.CI_REGISTRY_USER }}/${{ vars.TASK_SERVICE_REPOSITORY_NAME }}:1.0.0 || true &&
+          docker rmi $(docker images -f "dangling=true" -q) &&
+          docker network create -d bridge ${{ vars.DOCKER_NETWORK_NAME }} || true &&
+          docker run -d --rm -e REMOTE_SERVER_HOST=${{ vars.REMOTE_SERVER_HOST }} -e DOCKER_NETWORK_NAME=${{ vars.DOCKER_NETWORK_NAME }} -e POSTGRES_DATABASE_USERNAME=${{ vars.POSTGRES_DATABASE_USERNAME }} -e POSTGRES_DATABASE_PASSWORD=${{ vars.POSTGRES_DATABASE_PASSWORD }} -e JWT_SECRET=${{ vars.JWT_SECRET }} --name ${{ vars.CI_REGISTRY_USER }}_${{ vars.TASK_SERVICE_REPOSITORY_NAME }} --network ${{ vars.DOCKER_NETWORK_NAME }} -p ${{ vars.TASK_SERVICE_CONTAINER_PORT }}:${{ vars.TASK_SERVICE_CONTAINER_PORT }} ${{ vars.CI_REGISTRY_USER }}/${{ vars.TASK_SERVICE_REPOSITORY_NAME }}:1.0.0"
