@@ -53,6 +53,7 @@ public class SecurityConfiguration {
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {
         return httpSecurity
             .csrf(AbstractHttpConfigurer::disable)
+            .cors(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(registry -> registry
                 .requestMatchers("/api/v1/auth/**", "/api/v1/user/**", "/swagger-ui/**", "/v3/api-docs/**")
                 .permitAll()
